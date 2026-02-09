@@ -73,7 +73,7 @@ def kalman_filter(A, H, Q, R, x0_hat, P0, Y):
 
 
 def main():
-    rng = np.random.default_rng(7)
+    rng = np.random.default_rng(np.random.randint(0, 128))
 
     # --- 2D financial model: price + drift ---
     # x_n = [p_n, mu_n]^T
@@ -98,7 +98,7 @@ def main():
     R = np.array([[sigma_y**2]])
 
     # Prior
-    x0_mean = np.array([10.0, 10.05])
+    x0_mean = np.array([0.0, 0.05])
     P0 = np.array([
         [2.0, 0.0],
         [0.0, 0.2]
