@@ -186,6 +186,154 @@ def make_dashboard_plot(X, Y, Xhat, out_html_path="kalman_2d_dashboard.html", ou
 
     return fig
 
+def save_separate_plots(X, Y, Xhat, prefix="kalman_2d"):
+    """
+    Create and save three separate PNG figures:
+    1) Price time series
+    2) Drift (trend) time series
+    3) State-space trajectory
+    Requires: pip install -U kaleido
+    """
+
+    N = Y.shape[0]
+    t = np.arange(N + 1)
+    t_obs = np.arange(1, N + 1)
+
+    # -----------------------------
+    # 1) Price time series
+    # -----------------------------
+    fig_price = go.Figure()
+
+    fig_price.add_trace(go.Scatter(
+        x=t, y=X[:, 0],
+        mode="lines",
+        name="True latent price $p_n$"
+    ))
+
+    fig_price.add_trace(go.Scatter(
+        x=t_obs, y=Y[:, 0],
+        mode="lines",
+        name="Observed price $y_n$"
+    ))
+
+    fig_price.add_trace(go.Scatter(
+        x=t, y=Xhat[:, 0],
+        mode="lines",
+        name="Filtered estimate $\hat p_{n|n}$"
+    ))
+
+    fig_price.update_layout(
+        title=dict(
+            text="Latent Price Estimation via Kalman Filter",
+            x=0.5
+        ),
+        xaxis_title="Time index $n$",
+        yaxis_title="Price level",
+        template="plotly_white",
+        height=500,
+        width=900,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=80, b=120)
+    )
+
+    fig_price.write_image(f"{prefix}_price.png", scale=3)
+
+    # -----------------------------
+    # 2) Drift (trend) time series
+    # -----------------------------
+    fig_drift = go.Figure()
+
+    fig_drift.add_trace(go.Scatter(
+        x=t, y=X[:, 1],
+        mode="lines",
+        name="True drift $\\mu_n$"
+    ))
+
+    fig_drift.add_trace(go.Scatter(
+        x=t, y=Xhat[:, 1],
+        mode="lines",
+        name="Filtered drift estimate $\\hat\\mu_{n|n}$"
+    ))
+
+    fig_drift.update_layout(
+        title=dict(
+            text="Trend (Drift) Estimation via Kalman Filter",
+            x=0.5
+        ),
+        xaxis_title="Time index $n$",
+        yaxis_title="Drift $\\mu$",
+        template="plotly_white",
+        height=500,
+        width=900,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=80, b=120)
+    )
+
+    fig_drift.write_image(f"{prefix}_drift.png", scale=3)
+
+    # -----------------------------
+    # 3) State-space trajectory
+    # -----------------------------
+    fig_state = go.Figure()
+
+    fig_state.add_trace(go.Scatter(
+        x=X[:, 0],
+        y=X[:, 1],
+        mode="lines+markers",
+        name="True trajectory $(p_n, \\mu_n)$",
+        marker=dict(size=5),
+        line=dict(width=2)
+    ))
+
+    fig_state.add_trace(go.Scatter(
+        x=Xhat[:, 0],
+        y=Xhat[:, 1],
+        mode="lines+markers",
+        name="Filtered trajectory $(\\hat p_{n|n}, \\hat\\mu_{n|n})$",
+        marker=dict(size=5),
+        line=dict(width=2)
+    ))
+
+    fig_state.update_layout(
+        title=dict(
+            text="State-Space Trajectory: Price vs Drift",
+            x=0.5
+        ),
+        xaxis_title="Price level $p$",
+        yaxis_title="Drift $\\mu$",
+        template="plotly_white",
+        height=600,
+        width=700,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=80, b=120)
+    )
+
+    fig_state.write_image(f"{prefix}_state_space.png", scale=3)
+
+    print("Saved PNG files:")
+    print(f"  {prefix}_price.png")
+    print(f"  {prefix}_drift.png")
+    print(f"  {prefix}_state_space.png")
+
+
 
 def main():
     rng = np.random.default_rng(np.random.randint(0, 128))
@@ -213,17 +361,12 @@ def main():
     Xhat, _ = kalman_filter(A, H, Q, R, x0_hat=x0_mean, P0=P0, Y=Y)
 
     # One beautiful dashboard you can view all at once + saved to file:
-    fig = make_dashboard_plot(
-        X, Y, Xhat,
-        out_html_path="kalman_2d_dashboard.html",
-        out_png_prefix="kalman_2d"  # set e.g. "kalman_2d" if you want PNG export too
-    )
+    save_separate_plots(X, Y, Xhat, prefix="kalman_2d")
+
 
     # In notebooks: display inline
     # fig.show()
     # In scripts: it will open in browser if you uncomment:
-    fig.show()
-
 
 if __name__ == "__main__":
     main()
