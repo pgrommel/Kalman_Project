@@ -159,6 +159,32 @@ def add_start_end_markers(fig, x, y, name_prefix, row, col):
         col=col,
     )
 
+def empirical_mse_mc(A, H, Q, R, x0_mean, P0, N, M, seed=0):
+    """
+    Monte Carlo estimate of MSE_n = E[ ||X_n - Xhat_{n|n}||^2 ], n=1..N
+    using M independent simulated trajectories.
+
+    Returns
+    -------
+    mse : (N+1,) array with mse[0] included (usually 0-ish / depends on init),
+          mse[n] corresponds to time n.
+    """
+    rng = np.random.default_rng(seed)
+
+    mse_acc = np.zeros(N + 1, dtype=float)
+
+    for i in range(M):
+        # Each run uses fresh randomness from rng (still reproducible overall via seed)
+        X, Y = simulate_lgssm_2d(A, H, Q, R, x0_mean, P0, N, rng)
+        Xhat, _ = kalman_filter(A, H, Q, R, x0_hat=x0_mean, P0=P0, Y=Y)
+
+        # squared Euclidean error at each time n (including n=0)
+        err = X - Xhat                    # (N+1, dim_x)
+        se = np.sum(err**2, axis=1)       # (N+1,)
+        mse_acc += se
+
+    mse = mse_acc / M
+    return mse
 
 # -----------------------------
 # Plots (Dashboard + Separate)
@@ -389,6 +415,35 @@ def save_separate_plots(X, Y, Xhat, P_filt, prefix="kalman_2d", ellipse_conf=0.9
     print(f"  {prefix}_drift.png")
     print(f"  {prefix}_state_space.png")
 
+def save_mse_plot(mse, prefix="kalman_2d"):
+    t = np.arange(len(mse))
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=t, y=mse, mode="lines", name="Empirical MSE"
+    ))
+
+    fig.update_layout(
+        title=dict(text="Monte Carlo Estimate of the Filter MSE", x=0.5),
+        xaxis_title="Time index $n$",
+        yaxis_title=r"$\mathrm{MSE}_n \approx \frac{1}{M}\sum_{i=1}^M \|X_n^{(i)}-\hat X_{n|n}^{(i)}\|^2$",
+        template="plotly_white",
+        height=500,
+        width=900,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=80, b=140)
+    )
+
+    fig.write_image(f"{prefix}_mse.png", scale=3)
+    print(f"Saved MSE PNG: {prefix}_mse.png")
+
+
 
 # -----------------------------
 # Main
@@ -429,6 +484,11 @@ def main():
         ellipse_conf=0.95,
     )
     fig.show()
+    # --- Monte Carlo MSE ---
+    M = 300  # e.g. 100-1000 depending on speed
+    mse_seed = 12345  # fix for reproducibility of the MSE curve
+    mse = empirical_mse_mc(A, H, Q, R, x0_mean, P0, N, M, seed=mse_seed)
+    save_mse_plot(mse, prefix="kalman_2d")
 
 
 if __name__ == "__main__":
