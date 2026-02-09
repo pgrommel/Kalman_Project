@@ -463,12 +463,14 @@ def main():
     Q = np.array([[sigma_p**2, 0.0],
                   [0.0, sigma_mu**2]])
 
-    sigma_y = 0.80
+    sigma_y = 1.50
     R = np.array([[sigma_y**2]])
 
     x0_mean = np.array([0.0, 0.05])
     P0 = np.array([[2.0, 0.0],
                    [0.0, 0.2]])
+    P0 = np.array([[1.0, 0.0],
+               [0.0, 0.05]])
 
     N = 50
 
