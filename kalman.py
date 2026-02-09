@@ -336,8 +336,9 @@ def save_separate_plots(X, Y, Xhat, prefix="kalman_2d"):
 
 
 def main():
-    rng = np.random.default_rng(np.random.randint(0, 128))
-    print(f"rng: {rng}")
+    seed = int(np.random.randint(0, 128))
+    rng = np.random.default_rng(seed)
+    print(f"seed: {seed}")
 
     A = np.array([[1.0, 1.0],
                   [0.0, 1.0]])
