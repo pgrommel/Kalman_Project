@@ -216,7 +216,7 @@ def main():
     fig = make_dashboard_plot(
         X, Y, Xhat,
         out_html_path="kalman_2d_dashboard.html",
-        out_png_prefix=None  # set e.g. "kalman_2d" if you want PNG export too
+        out_png_prefix="kalman_2d"  # set e.g. "kalman_2d" if you want PNG export too
     )
 
     # In notebooks: display inline
