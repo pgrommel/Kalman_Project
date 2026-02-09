@@ -1,5 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 def simulate_lgssm_2d(A, H, Q, R, x0_mean, P0, N, rng):
@@ -72,76 +73,156 @@ def kalman_filter(A, H, Q, R, x0_hat, P0, Y):
     return x_hat_filt.squeeze(-1), P_filt
 
 
+def make_dashboard_plot(X, Y, Xhat, out_html_path="kalman_2d_dashboard.html", out_png_prefix=None):
+    """
+    Creates one Plotly dashboard (3 panels) and saves it as an HTML file.
+    Optionally saves PNGs if out_png_prefix is provided AND kaleido is installed.
+    """
+    N = Y.shape[0]
+    t = np.arange(N + 1)
+    t_obs = np.arange(1, N + 1)
+
+    # Build a 3-row dashboard:
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.10,
+        subplot_titles=(
+            "Price: latent vs observed vs filtered",
+            "Drift (trend): true vs filtered",
+            "State space: (price, drift) trajectory"
+        )
+    )
+
+    # --- Row 1: price time series ---
+    fig.add_trace(
+        go.Scatter(x=t, y=X[:, 0], mode="lines", name="True latent price p_n"),
+        row=1, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=t_obs, y=Y[:, 0], mode="lines", name="Observed price y_n"),
+        row=1, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=t, y=Xhat[:, 0], mode="lines", name="Filtered price estimate"),
+        row=1, col=1
+    )
+    fig.update_xaxes(title_text="n", row=1, col=1)
+    fig.update_yaxes(title_text="price", row=1, col=1)
+
+    # --- Row 2: drift time series ---
+    fig.add_trace(
+        go.Scatter(x=t, y=X[:, 1], mode="lines", name="True drift μ_n"),
+        row=2, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=t, y=Xhat[:, 1], mode="lines", name="Filtered drift estimate"),
+        row=2, col=1
+    )
+    fig.update_xaxes(title_text="n", row=2, col=1)
+    fig.update_yaxes(title_text="drift μ", row=2, col=1)
+
+    # --- Row 3: state-space trajectory ---
+    # fig.add_trace(
+    #     go.Scatter(x=X[:, 0], y=X[:, 1], mode="lines", name="True trajectory (p, μ)"),
+    #     row=3, col=1
+    # )
+    # fig.add_trace(
+    #     go.Scatter(x=Xhat[:, 0], y=Xhat[:, 1], mode="lines", name="Filtered trajectory (p, μ)"),
+    #     row=3, col=1
+    # )
+    # fig.update_xaxes(title_text="price p", row=3, col=1)
+    # fig.update_yaxes(title_text="drift μ", row=3, col=1)
+    # --- Row 3: state-space trajectory with markers ---
+    fig.add_trace(
+        go.Scatter(
+            x=X[:, 0],
+            y=X[:, 1],
+            mode="lines+markers",
+            name="True trajectory (p, μ)",
+            marker=dict(size=5),
+            line=dict(width=2)
+        ),
+        row=3, col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=Xhat[:, 0],
+            y=Xhat[:, 1],
+            mode="lines+markers",
+            name="Filtered trajectory (p, μ)",
+            marker=dict(size=5),
+            line=dict(width=2)
+        ),
+        row=3, col=1
+    )
+
+
+    # Global styling (clean + readable)
+    fig.update_layout(
+        title="Kalman Filter (2D State Financial Model): Price + Drift",
+        template="plotly_white",
+        height=1000,
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0.0),
+        margin=dict(l=60, r=30, t=90, b=60)
+    )
+
+    # Save dashboard
+    fig.write_html(out_html_path, include_plotlyjs="cdn")
+    print(f"Wrote interactive dashboard to: {out_html_path}")
+
+    # Optional PNG export (requires kaleido)
+    if out_png_prefix is not None:
+        try:
+            fig.write_image(f"{out_png_prefix}_dashboard.png", scale=2)
+            print(f"Wrote PNG to: {out_png_prefix}_dashboard.png")
+        except Exception as e:
+            print("PNG export failed (likely missing 'kaleido').")
+            print("Install it via: pip install -U kaleido")
+            print(f"Error was: {e}")
+
+    return fig
+
+
 def main():
     rng = np.random.default_rng(np.random.randint(0, 128))
+    print(f"rng: {rng}")
 
-    # --- 2D financial model: price + drift ---
-    # x_n = [p_n, mu_n]^T
-    # p_n = p_{n-1} + mu_{n-1} + noise
-    # mu_n = mu_{n-1} + noise
-    A = np.array([
-        [1.0, 1.0],
-        [0.0, 1.0]
-    ])
-    H = np.array([[1.0, 0.0]])  # observe price only
+    A = np.array([[1.0, 1.0],
+                  [0.0, 1.0]])
+    H = np.array([[1.0, 0.0]])
 
-    # Process noise: price shock and drift shock
-    sigma_p = 0.40   # "efficient price" volatility per step
-    sigma_mu = 0.05  # drift changes slowly
-    Q = np.array([
-        [sigma_p**2, 0.0],
-        [0.0, sigma_mu**2]
-    ])
+    sigma_p = 0.40
+    sigma_mu = 0.05
+    Q = np.array([[sigma_p**2, 0.0],
+                  [0.0, sigma_mu**2]])
 
-    # Observation noise: microstructure / measurement noise
     sigma_y = 0.80
     R = np.array([[sigma_y**2]])
 
-    # Prior
     x0_mean = np.array([0.0, 0.05])
-    P0 = np.array([
-        [2.0, 0.0],
-        [0.0, 0.2]
-    ])
+    P0 = np.array([[2.0, 0.0],
+                   [0.0, 0.2]])
 
     N = 120
 
-    # Simulate and filter
     X, Y = simulate_lgssm_2d(A, H, Q, R, x0_mean, P0, N, rng)
     Xhat, _ = kalman_filter(A, H, Q, R, x0_hat=x0_mean, P0=P0, Y=Y)
 
-    t = np.arange(N + 1)
+    # One beautiful dashboard you can view all at once + saved to file:
+    fig = make_dashboard_plot(
+        X, Y, Xhat,
+        out_html_path="kalman_2d_dashboard.html",
+        out_png_prefix=None  # set e.g. "kalman_2d" if you want PNG export too
+    )
 
-    # --- Plot 1: observed price vs true latent price vs filtered latent price ---
-    plt.figure()
-    plt.plot(t, X[:, 0], label="True latent price p_n")
-    plt.plot(t[1:], Y[:, 0], label="Observed price y_n")
-    plt.plot(t, Xhat[:, 0], label="Filtered price estimate")
-    plt.xlabel("n")
-    plt.ylabel("price (arbitrary units)")
-    plt.title("Kalman filter (2D state): price")
-    plt.legend()
-    plt.show()
-
-    # --- Plot 2: drift (trend) true vs filtered estimate ---
-    plt.figure()
-    plt.plot(t, X[:, 1], label="True drift mu_n")
-    plt.plot(t, Xhat[:, 1], label="Filtered drift estimate")
-    plt.xlabel("n")
-    plt.ylabel("drift")
-    plt.title("Kalman filter (2D state): drift")
-    plt.legend()
-    plt.show()
-
-    # --- Plot 3: 2D state-space trajectory (p vs mu) ---
-    plt.figure()
-    plt.plot(X[:, 0], X[:, 1], label="True state trajectory (p, mu)")
-    plt.plot(Xhat[:, 0], Xhat[:, 1], label="Filtered state trajectory (p, mu)")
-    plt.xlabel("price p")
-    plt.ylabel("drift mu")
-    plt.title("2D hidden state trajectory (state space)")
-    plt.legend()
-    plt.show()
+    # In notebooks: display inline
+    # fig.show()
+    # In scripts: it will open in browser if you uncomment:
+    fig.show()
 
 
 if __name__ == "__main__":
