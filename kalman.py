@@ -444,12 +444,112 @@ def save_mse_plot(mse, prefix="kalman_2d"):
     print(f"Saved MSE PNG: {prefix}_mse.png")
 
 
+def save_forecast_plot(A, H, Q, R, Xhat, P_filt, Y, horizon=20, prefix="kalman_2d", conf=0.95):
+    """
+    Forecast future observations using the filtered terminal state x_{N|N} and covariance P_{N|N}.
+    Plot: observed y_n, filtered price estimate, forecast mean + confidence band.
+    """
+    import numpy as np
+    import plotly.graph_objects as go
+
+    A = np.atleast_2d(A)
+    H = np.atleast_2d(H)
+    Q = np.atleast_2d(Q)
+    R = np.atleast_2d(R)
+
+    N = Y.shape[0]  # observations: n=1..N
+    t_obs = np.arange(1, N + 1)
+    t_state = np.arange(0, N + 1)
+    t_fore = np.arange(N + 1, N + horizon + 1)
+
+    xN = Xhat[-1].reshape(-1, 1)   # x_{N|N}
+    PN = P_filt[-1]               # P_{N|N}
+
+    # z-score for normal CI
+    z_map = {0.90: 1.645, 0.95: 1.96, 0.99: 2.576}
+    z = z_map.get(conf, 1.96)
+
+    y_mean = np.zeros(horizon)
+    y_std = np.zeros(horizon)
+
+    A_h = np.eye(A.shape[0])          # A^h
+    A_i = np.eye(A.shape[0])          # A^i for noise sum
+    noise_sum = np.zeros_like(PN)     # sum_{i=0}^{h-1} A^i Q (A^i)^T
+
+    for h in range(1, horizon + 1):
+        # Update noise sum with term for i=h-1
+        if h == 1:
+            A_i = np.eye(A.shape[0])  # A^0
+        else:
+            A_i = A @ A_i             # now A^{h-1}
+        noise_sum = noise_sum + A_i @ Q @ A_i.T
+
+        # Update A^h
+        A_h = A @ A_h
+
+        # Predicted state moments
+        x_pred = A_h @ xN
+        P_pred = A_h @ PN @ A_h.T + noise_sum
+
+        # Predicted observation moments
+        y_pred = (H @ x_pred).item()
+        y_var = (H @ P_pred @ H.T + R).item()
+
+        y_mean[h - 1] = y_pred
+        y_std[h - 1] = np.sqrt(max(y_var, 0.0))
+
+    upper = y_mean + z * y_std
+    lower = y_mean - z * y_std
+
+    fig = go.Figure()
+
+    # observed
+    fig.add_trace(go.Scatter(
+        x=t_obs, y=Y[:, 0], mode="lines", name="Observed price y_n"
+    ))
+
+    # filtered latent price estimate
+    fig.add_trace(go.Scatter(
+        x=t_state, y=Xhat[:, 0], mode="lines", name="Filtered price p̂_{n|n}"
+    ))
+
+    # forecast mean
+    fig.add_trace(go.Scatter(
+        x=t_fore, y=y_mean, mode="lines", name="Forecast mean E[y_{n}|Y_{1:N}]"
+    ))
+
+    # confidence band
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([t_fore, t_fore[::-1]]),
+        y=np.concatenate([upper, lower[::-1]]),
+        fill="toself",
+        mode="lines",
+        line=dict(width=0),
+        name=f"{int(conf * 100)}% forecast band"
+    ))
+
+    fig.update_layout(
+        title=dict(text="Price Forecast using Estimated Drift (Kalman Filter)", x=0.5),
+        xaxis_title="Time index n",
+        yaxis_title="Price level",
+        template="plotly_white",
+        height=550,
+        width=950,
+        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+        margin=dict(t=80, b=120),
+    )
+
+    fig.write_image(f"{prefix}_forecast.png", scale=3)
+    print(f"Saved forecast PNG: {prefix}_forecast.png")
+
+
+
 
 # -----------------------------
 # Main
 # -----------------------------
 def main():
-    seed = int(np.random.randint(0, 128))
+    seed = 1 # int(np.random.randint(0, 128)) #20, 123 good
     rng = np.random.default_rng(seed)
     print(f"seed: {seed}")
 
@@ -458,19 +558,19 @@ def main():
                   [0.0, 1.0]])
     H = np.array([[1.0, 0.0]])
 
-    sigma_p = 0.40
-    sigma_mu = 0.05
+    sigma_p = 0.10 #0.40
+    sigma_mu = 0.02 #0.05
     Q = np.array([[sigma_p**2, 0.0],
                   [0.0, sigma_mu**2]])
 
-    sigma_y = 1.50
+    sigma_y = 0.8 #1.50
     R = np.array([[sigma_y**2]])
 
     x0_mean = np.array([0.0, 0.05])
-    P0 = np.array([[2.0, 0.0],
-                   [0.0, 0.2]])
     P0 = np.array([[1.0, 0.0],
                [0.0, 0.05]])
+    P0 = np.array([[0.5, 0.0],
+               [0.0, 0.08]])
 
     N = 50
 
@@ -487,10 +587,12 @@ def main():
     )
     fig.show()
     # --- Monte Carlo MSE ---
-    M = 300  # e.g. 100-1000 depending on speed
+    M = 5000  # e.g. 100-1000 depending on speed
     mse_seed = 12345  # fix for reproducibility of the MSE curve
     mse = empirical_mse_mc(A, H, Q, R, x0_mean, P0, N, M, seed=mse_seed)
     save_mse_plot(mse, prefix="kalman_2d")
+
+    save_forecast_plot(A, H, Q, R, Xhat, P_filt, Y, horizon=20, prefix="kalman_2d", conf=0.95)
 
 
 if __name__ == "__main__":
